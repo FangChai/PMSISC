@@ -14,9 +14,9 @@ enum conversation_type {
 };
 
 struct student_info {
-        char id[ID_LEN];
-        char name[NAME_LEN];
-        char faculty[FACULTY_LEN];
+        string id;
+        string name;
+        string faculty;
 };
 
 struct conversation {
