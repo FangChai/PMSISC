@@ -10,7 +10,7 @@ extern "C"{
 #include <ctime>
 #include <csignal>
 #include <deque>
-#include "conversation.h"
+#include "session.h"
 #include "csismp_limits.h"
 
 
@@ -22,10 +22,10 @@ deque<student_info> sync_data;
 pthread_mutex_t local_data_mutex;
 
 void print_all_students();
-void process_conversation(conversation *conv)
+void process_session(session *conv)
 {
     switch(conv->type){
-        case conversation_type::CONVERSATION_ADD:
+        case session_type::SESSION_ADD:
             {
                 pthread_mutex_lock(&local_data_mutex);
                 copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(local_data));
@@ -42,7 +42,7 @@ void process_conversation(conversation *conv)
             }
             print_all_students();
             break;
-        case conversation_type::CONVERSATION_DEL:
+        case session_type::SESSION_DEL:
             {
                  pthread_mutex_lock(&local_data_mutex);
                  for_each(conv->info_list.begin(),conv->info_list.end(),[](const student_info &info)
@@ -67,11 +67,11 @@ void process_conversation(conversation *conv)
             }
             print_all_students();
             break;
-        case conversation_type::CONVERSATION_ACK:
+        case session_type::SESSION_ACK:
             break;
-        case conversation_type::CONVERSATION_RJT:
+        case session_type::SESSION_RJT:
             break;
-        case conversation_type::CONVERSATION_SYN:
+        case session_type::SESSION_SYN:
             {
                 copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(sync_data));
                 stable_sort(sync_data.begin(),sync_data.end(),[](const student_info &a,const student_info &b)
@@ -97,10 +97,10 @@ void print_all_students()
 }
 void *on_timer_up()
 {
-    conversation session;
-    session.type=conversation_type::CONVERSATION_SYN;
+    session broadcast_session;
+    broadcast_session.type=session_type::SESSION_SYN;
     pthread_mutex_lock(&local_data_mutex);
-    session.info_list.assign(local_data.begin(),local_data.end());
+    broadcast_session.info_list.assign(local_data.begin(),local_data.end());
     pthread_mutex_unlock(&local_data_mutex);
     //TODO
     //Send MSG.

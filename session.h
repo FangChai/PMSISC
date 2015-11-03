@@ -1,4 +1,4 @@
-#ifndef CONVERSATION_H
+#ifndef SESSION_H
 #define SESSION_H
 
 #include <vector>
