@@ -2,11 +2,12 @@
 #define CONVERSATION_H
 
 #include <vector>
+#include <cinttypes>
 #include "csismp_limits.h"
 
 using namespace std;
 
-enum conversation_type {
+enum session_type {
         CONVERSATION_ADD,
         CONVERSATION_DEL,
         CONVERSATION_ACK,
@@ -20,8 +21,9 @@ struct student_info {
         string faculty;
 };
 
-struct conversation {
-        conversation_type type;
+struct session {
+        uint32_t session_id;
+        session_type type;
         vector<struct student_info> info_list;
 };
 

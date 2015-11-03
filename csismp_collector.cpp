@@ -15,7 +15,7 @@ extern "C" {
 #include <mutex>
 #include <string>
 #include "csismp_limits.h"
-#include "conversation.h"
+#include "session.h"
 #include "timer.h"
 
 #define BUFFER_SIZE 2048
@@ -36,7 +36,7 @@ struct control_code {
         uint8_t begin;
         uint8_t end;
         uint32_t slice_nr;
-        uint32_t id;
+        uint32_t session_id;
 };
 
 struct tlv {
@@ -54,6 +54,10 @@ struct slice {
         vector<struct tlv> tlvs;
 };
 
+struct slice_set {
+        uint32_t total;
+        vector<struct slice> slices;
+};
 
 struct mac_configure {
         uint8_t dest_macs[256][6];
@@ -62,8 +66,7 @@ struct mac_configure {
 };
 
 static const uint8_t sync_mac[6] = {0x01, 0x80, 0xc2, 0xdd, 0xfe, 0xff};
-static map<uint32_t, vector<struct slice> > conversation_map;
-static map<uint32_t, uint32_t> slices_statistics;
+static map<uint32_t, struct slice_set> session_map;
 static struct mac_configure configure;
 
 static pthread_mutex_t collector_mtx;
@@ -98,12 +101,11 @@ int cmp_mac(const uint8_t mac1[], const uint8_t mac2[])
         return result;
 }
 
-void forget_conversation(uint32_t id)
+void forget_session(uint32_t id)
 {
         pthread_mutex_trylock(&collector_mtx); //signal handler should not be blocked
 
-        slices_statistics.erase(id);
-        conversation_map.erase(id);
+        session_map.erase(id);
 
         pthread_mutex_unlock(&collector_mtx);
 }
@@ -158,6 +160,9 @@ int process_dgram(const uint8_t* raw, int len)
         int remain = len;
         struct control_code cntl_cd;
         struct slice slc;
+        struct slice_set slc_set;
+        uint8_t err_flag, end_flag;
+
 
         parse_control(&cntl_cd, curr);
         curr += CONTROL_LEN;
@@ -165,42 +170,71 @@ int process_dgram(const uint8_t* raw, int len)
 
         slc.slice_nr = cntl_cd.slice_nr;
 
-        //if meet a new conversation, contruct a bed for it
+        //if meet a new session, contruct a bed for it
         pthread_mutex_lock(&collector_mtx);
 
-        if(slices_statistics.find(cntl_cd.id) == slices_statistics.end()) {
-                slices_statistics[cntl_cd.id] = 0;
-                vector<struct slice> slices;
-                conversation_map[cntl_cd.id] = slices;
-                add_timer(cntl_cd.id);
+        if(slices_statistics.find(cntl_cd.session_id) == slices_statistics.end()) {
+
+                struct slice_set sset;
+
+                sset.current = 0;
+                sset.total = 0;
+                session_map[cntl_cd.session_id] = sset;
+
+                add_timer(cntl_cd.session_id);
         }
 
         pthread_mutex_unlock(&collector_mtx);
 
         //decompose the raw dgram to tlvs
-        uint8_t err_flag = 0;
-        uint8_t end_flag = 0;
+        err_flag = end_flag = 0;
         while(remain > 0) {
 
                 struct tlv t;
                 uint8_t len = get_tlv(&t, curr);
 
                 if( -1 == len) {
-                        pthread_mutex_lock(&collector_mtx);
-                        forget_conversation(cntl_cd.id);
-                        pthread_mutex_unlock(&collector_mtx);
                         err_flag = 1;
                         break;
                 } else {
-                        if(t.type == TLV_END
-                        conversation_map[cntl_cd.id].push_back(t);
+                        if(t.type == TLV_END){
+                                end_flag = 1;
+                                break;
+                        } else if(t.type == TLV_FACULTY
+                                  || t.type == TLV_ID
+                                  || t.type == TLV_NAME ) {
+
+                                slc.tlvs.push_back(t);
+                        }
+
                         remain -= len;
                         curr += len;
-                        }
-                        slices_statistics[cntl_cd.id]++;
-
                 }
         }
+
+        //if encountered error, report to the caller
+        if(err_flag || !end_flag) {
+                forget_session(cntl_cd.session_id);
+                return -1;
+        }
+
+
+        //update the corresponding slice_set
+
+        pthread_mutex_lock(&collector_mtx);
+
+        &slc_set = session_map[cntl_cd.session_id];
+        if(cntl_cd.end)
+                slc_set.total = cntl_cd.slice_nr;
+
+        if((slc_set.total != 0) &&  (slc_set.slices.size() == slc_set.total)) {
+                struct session con;
+
+                con.session_id = session_id
+                
+        }
+
+        pthread_mutex_unlock(&collector_mtx);
 
 }
 
@@ -254,7 +288,7 @@ int collect_loop()
 void init_collector()
 {
         pthread_mutex_init(&collector_mtx, NULL);
-        init_timer(forget_conversation);
+        init_timer(forget_session);
 }
 
 void destroy_collector()
