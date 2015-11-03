@@ -10,7 +10,8 @@ enum conversation_type {
         CONVERSATION_ADD,
         CONVERSATION_DEL,
         CONVERSATION_ACK,
-        CONVERSATION_RJT
+        CONVERSATION_RJT,
+        CONVERSATION_SYN
 };
 
 struct student_info {

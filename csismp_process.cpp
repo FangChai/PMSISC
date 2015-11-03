@@ -4,6 +4,7 @@ extern "C"{
 #include <iostream>
 #include <vector>
 #include <iterator>
+#include <algorithm>
 #include <ctime>
 #include <csignal>
 #include "conversation.h"
@@ -28,6 +29,17 @@ void process_conversation(conversation *conv)
             }
             break;
         case conversation_type::CONVERSATION_DEL:
+            {
+                 pthread_mutex_lock(&local_data_mutex);
+                 for_each(conv->info_list.begin(),conv->info_list.end(),[](student_info &info)
+                    {
+                        for(auto iter=local_data.begin();iter!=local_data.end();++iter){
+                            if(iter->id==info.id){
+                                iter=local_data.erase(iter);
+                            }
+                        }
+                    })
+            }
             break;
         case conversation_type::CONVERSATION_ACK:
             break;
@@ -39,7 +51,9 @@ void process_conversation(conversation *conv)
 }
 void *cast_data(void *arg)
 {
+    conversation session;
     pthread_mutex_lock(&local_data_mutex);
+    session.info_list.assign(local_data);
     pthread_mutex_unlock(&local_data_mutex);
     pthread_exit(NULL);
 }
