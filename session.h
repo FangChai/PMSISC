@@ -1,5 +1,5 @@
 #ifndef CONVERSATION_H
-#define CONVERSATION_H
+#define SESSION_H
 
 #include <vector>
 #include <cinttypes>
@@ -8,11 +8,11 @@
 using namespace std;
 
 enum session_type {
-        CONVERSATION_ADD,
-        CONVERSATION_DEL,
-        CONVERSATION_ACK,
-        CONVERSATION_RJT,
-        CONVERSATION_SYN
+        SESSION_ADD = 1,
+        SESSION_DEL,
+        SESSION_ACK,
+        SESSION_RJT,
+        SESSION_SYN
 };
 
 struct student_info {
