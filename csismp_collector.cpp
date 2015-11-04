@@ -27,6 +27,10 @@ extern "C" {
 
 #define DEBUG
 
+#ifdef DEBUG
+extern void print_session(const struct session& s);
+#endif
+
 using namespace std;
 
 static const uint8_t sync_mac[6] = {0x01, 0x80, 0xc2, 0xdd, 0xfe, 0xff};
@@ -318,6 +322,9 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                         return -3;
                 }
 //call cfb      process_session(session);
+                #ifdef DEBUG
+                print_session(s);
+                #endif
                 forget_session(mcid_pair);
 
         }
@@ -356,7 +363,7 @@ void collector(u_char *args, const struct pcap_pkthdr *header, const u_char *buf
 
 }
 
-void init_collector()
+void start_collector()
 {
         string dev;
         char errbuf[PCAP_ERRBUF_SIZE];
@@ -402,22 +409,24 @@ void destroy_collector()
 
 int main()
 {
-/*
+
         uint8_t test_dgram[BUFFER_SIZE];
         char c;
-        size_t len;
+        size_t len = 0;
         struct pcap_pkthdr header;
 
+        configure = mac_configure("Config.txt");
         while(EOF != (c = getchar()))
         {
                 test_dgram[len++] = c;
         }
 
         header.len = len;
-//        collector(NULL, &header, test_dgram);
+        collector(NULL, &header, test_dgram);
 
-        init_collector();
-*/
+        // start_collector();
+
+/*
         struct session s;
         s.type = SESSION_ADD;
         s.session_id = 3;
@@ -432,6 +441,6 @@ int main()
 
         init_sender();
         send_session(s);
-
+*/
         return 0;
 }

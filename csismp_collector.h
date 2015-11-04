@@ -46,5 +46,6 @@ struct slice_set {
 typedef pair<vector<uint8_t>, uint32_t> mac_id_pair_t;
 
 string get_dev();
+void start_collector();
 
 #endif

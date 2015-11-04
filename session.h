@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cinttypes>
+#include <string>
 #include "csismp_limits.h"
 
 using namespace std;
