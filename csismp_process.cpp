@@ -13,6 +13,7 @@ extern "C"{
 #include <deque>
 #include "session.h"
 #include "csismp_limits.h"
+#include "csismp_sender.h"
 
 using namespace std;
 
@@ -25,12 +26,12 @@ bool check_valid(session to_check)
     stable_sort(to_check.info_list.begin(),to_check.info_list.end(),[](const student_info &a,const student_info &b)
             {
                 return a.id<b.id;
-            }
-    if(unique(to_check.begin(),to_check.end(),[](const student_info &a ,const student_info &b)
+            });
+    if(unique(to_check.info_list.begin(),to_check.info_list.end(),[](const student_info &a ,const student_info &b)
             {
                 return a.id==b.id;
-                })!=to_check.end()){
-    return false;
+                })!=to_check.info_list.end()){
+        return false;
     }
     return true;
 }
@@ -134,12 +135,11 @@ void process_session(session *conv)
                     pthread_mutex_unlock(&local_data_mutex);
                     print_all_students();
                     session ack_msg=construct_ackmsg(conv);
-                    //TODO:
-                    //Send ACK MSG.
+                    send_session(ack_msg);
                 }
                 else {
                     session rjt_msg=construct_rjtmsg(conv);
-                    //TODO:
+                    send_session(rjt_msg);
                 }
             }
             break;
@@ -163,13 +163,11 @@ void process_session(session *conv)
                         });
                     if(!success){
                         session rjt_msg=construct_rjtmsg(conv);
-                        //TODO:
-                        //Send MSG.
+                        send_session(rjt_msg);
                     }
                     else {
                         session ack_msg=construct_ackmsg(conv);
-                        //TODO:
-                        //Send MSG.
+                        send_session(ack_msg);
                     }
                 }
             }
