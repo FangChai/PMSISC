@@ -394,7 +394,7 @@ void destroy_collector()
 
 int main()
 {
-
+/*
         uint8_t test_dgram[BUFFER_SIZE];
         char c;
         size_t len;
@@ -409,6 +409,21 @@ int main()
 //        collector(NULL, &header, test_dgram);
 
         init_collector();
+*/
+        struct session s;
+        s.type = SESSION_ADD;
+        s.session_id = 3;
+        s.source_mac[0] = 0x33;
+        s.source_mac[1] = 0x44;
+        s.source_mac[2] = 0x55;
+        s.source_mac[3] = 0x66;
+        s.source_mac[4] = 0x77;
+        s.source_mac[5] = 0x88;
+        s.info_list.push_back({"U201514795", "fuck", "Information security"});
+        s.info_list.push_back({"U201517777", "you",  "Security information"});
+
+        init_sender();
+        send_session(s);
 
         return 0;
 }
