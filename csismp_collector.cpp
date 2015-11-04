@@ -15,6 +15,7 @@ extern "C" {
 #include <map>
 #include <mutex>
 #include <algorithm>
+#include <utility>
 #include <cstring>
 #include "csismp_limits.h"
 #include "session.h"
@@ -28,10 +29,8 @@ extern "C" {
 
 using namespace std;
 
-
 static const uint8_t sync_mac[6] = {0x01, 0x80, 0xc2, 0xdd, 0xfe, 0xff};
-static map<uint32_t, struct slice_set> session_map;
-static map<uint32_t, vector<uint8_t>> mac_map;
+static map<mac_id_pair_t, struct slice_set> session_map;
 static struct mac_configure configure;
 static pthread_mutex_t collector_mtx;
 
@@ -99,40 +98,47 @@ void parse_control(struct control_code* ctrl, const uint8_t* raw)
         ctrl->session_id = be32toh(ctrl->session_id);
 }
 
-void forget_session(uint32_t id)
+void forget_session(mac_id_pair_t p)
 {
         pthread_mutex_trylock(&collector_mtx); //signal handler should not be blocked
-        session_map.erase(id);
-        mac_map.erase(id);
+        session_map.erase(p);
         pthread_mutex_unlock(&collector_mtx);
 
 }
 
-void reject_session(uint32_t id)
+void reject_session(mac_id_pair_t p)
 {
         struct session rjt_s;
 
+        //if all read forgotten, then we don't care
+        if(session_map.end() == session_map.find(p))
+                return;
+
         rjt_s.type = SESSION_RJT;
         for(int i = 0; i < 6; i++)
-                rjt_s.source_mac[i] = mac_map[id][i];
+                rjt_s.source_mac[i] = p.first[i];
 
-        rjt_s.session_id = id;
+        rjt_s.session_id = p.second;
         send_session(rjt_s);
-        forget_session(id);
+        forget_session(p);
 
 }
 
-int get_tlv(struct tlv* t,  const uint8_t* raw)
+int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len)
 {
         t->type = (tlv_type) raw[0];
         switch(raw[0]) {
         case TLV_END:
-                return 2;
+                if(raw[1] == 0 && len == 2)
+                        return 2;
+                else
+                        return -1;
                 break;
 
         case TLV_ID:
                 t->len = raw[1];
-                if(raw[1 + t->len] != '\0' || t->len > ID_LEN || t->len < 2)
+                if(raw[1 + t->len] != '\0' || t->len > ID_LEN
+                   || t->len < 2 || len < t->len  + TLV_HEAD_LEN)
                         return - 1;
                 t->data = string((const char *)(raw+2), t->len - 1);
                 return t->len + 2;
@@ -140,7 +146,8 @@ int get_tlv(struct tlv* t,  const uint8_t* raw)
 
         case TLV_NAME:
                 t->len = raw[1];
-                if(raw[1 + t->len] != '\0' || t->len > NAME_LEN || t->len < 2)
+                if(raw[1 + t->len] != '\0' || t->len > NAME_LEN
+                   || t->len < 2 || len < t->len + TLV_HEAD_LEN)
                         return - 1;
                 t->data = string((const char *)(raw+2), t->len - 1);
                 return t->len + 2;
@@ -148,7 +155,8 @@ int get_tlv(struct tlv* t,  const uint8_t* raw)
 
         case TLV_FACULTY:
                 t->len = raw[1];
-                if(raw[1 + t->len] != '\0' || t->len > FACULTY_LEN || t->len < 2)
+                if(raw[1 + t->len] != '\0' || t->len > FACULTY_LEN
+                   || t->len < 2 || len < t->len + TLV_HEAD_LEN)
                         return - 1;
                 t->data = string((const char *)(raw+2), t->len - 1);
                 return t->len + 2;
@@ -161,13 +169,16 @@ int get_tlv(struct tlv* t,  const uint8_t* raw)
 
 }
 
-int construct_session(uint32_t id, struct session* s, session_type type)
+int construct_session(mac_id_pair_t p, struct session* s, session_type type)
 {
-        struct slice_set& slc_set = session_map[id];
+        struct slice_set& slc_set = session_map[p];
         uint8_t curr_state = 0;    //0, 1, 2 : id, name, faculty
 
-        s->session_id = id;
+        s->session_id = p.second;
         s->type = type;
+
+        for(int i = 0; i < 6; ++i)
+                s->source_mac[i] = p.first[i];
 
         sort(slc_set.slices.begin(), slc_set.slices.end(), cmp_slice);
         if(type == SESSION_ADD) {
@@ -220,6 +231,8 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         int remain = len;
         struct control_code cntl_cd;
         struct slice slc;
+        vector<uint8_t> mac;
+        mac_id_pair_t mcid_pair;
         uint8_t err_flag, end_flag;
 
         parse_control(&cntl_cd, curr);
@@ -230,31 +243,28 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
         pthread_mutex_lock(&collector_mtx);
 
+        //construct the pair specifying this session
+        for(int i = 0; i < 6; i++) {
+                mcid_pair.first.push_back(source_mac[i]);
+        }
+        mcid_pair.second = cntl_cd.session_id;
+
         //if meet a new session, contruct a bed for it
-        if(session_map.find(cntl_cd.session_id) == session_map.end()) {
+        if(session_map.find(make_pair(mac, cntl_cd.session_id)) == session_map.end()) {
 
                 struct slice_set sset;
 
                 sset.total = 0;
-                session_map[cntl_cd.session_id] = sset;
+                session_map[mcid_pair] = sset;
 
-                for(int i = 0; i < 6; i++) {
-                        mac_map[cntl_cd.session_id].push_back(source_mac[i]);
-                }
-
-                add_timer(cntl_cd.session_id);
+                add_timer(mcid_pair);
         }
 
 
         pthread_mutex_unlock(&collector_mtx);
 
         if(len + sizeof(struct ether_header) > MAX_DGRAM_LEN) {
-                reject_session(cntl_cd.session_id);
-                return -1;
-        }
-        //conflicting source_mac
-        if(cmp_mac(mac_map[cntl_cd.session_id].data(), source_mac)) {
-                reject_session(cntl_cd.session_id);
+                reject_session(mcid_pair);
                 return -1;
         }
 
@@ -263,7 +273,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         while(remain > 0) {
 
                 struct tlv t;
-                uint8_t len = get_tlv(&t, curr);
+                uint8_t len = get_tlv(&t, curr, remain);
 
                 if( -1 == len) {
                         err_flag = 1;
@@ -286,14 +296,14 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
         //if encountered error, report to the caller
         if(err_flag || !end_flag) {
-                reject_session(cntl_cd.session_id);
+                reject_session(mcid_pair);
                 return -2;
         }
 
         //update the corresponding slice_set
 
         pthread_mutex_lock(&collector_mtx);
-        struct slice_set& slc_set = session_map[cntl_cd.session_id];
+        struct slice_set& slc_set = session_map[mcid_pair];
         if(cntl_cd.end)
                 slc_set.total = cntl_cd.slice_nr + 1;
 
@@ -301,16 +311,14 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         if((slc_set.total != 0) &&  (slc_set.slices.size() == slc_set.total)) {
                 struct session s;
 
-                for(int i = 0; i < 6; ++i)
-                        s.source_mac[i] = source_mac[i];
-
-                if(construct_session(cntl_cd.session_id, &s, cntl_cd.type) == -1) {
-                        reject_session(cntl_cd.session_id);
+                //fill id, type, info_list, mac
+                if(construct_session(mcid_pair, &s, cntl_cd.type) == -1) {
+                        reject_session(mcid_pair);
                         pthread_mutex_unlock(&collector_mtx);
                         return -3;
                 }
 //call cfb      process_session(session);
-                forget_session(cntl_cd.session_id);
+                forget_session(mcid_pair);
 
         }
 
@@ -356,7 +364,7 @@ void init_collector()
 
         //set up the lock and the timer
         pthread_mutex_init(&collector_mtx, NULL);
-        init_timer(forget_session);
+        init_timer(reject_session);
 
         //read config
         configure = mac_configure("Config.txt");
