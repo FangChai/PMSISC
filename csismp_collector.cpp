@@ -22,6 +22,7 @@ extern "C" {
 #include "timer.h"
 #include "csismp_collector.h"
 #include "csismp_sender.h"
+#include "csismp_process.h"
 #include "mac_configure.h"
 
 
@@ -37,6 +38,7 @@ static const uint8_t sync_mac[6] = {0x01, 0x80, 0xc2, 0xdd, 0xfe, 0xff};
 static map<mac_id_pair_t, struct slice_set> session_map;
 static struct mac_configure configure;
 static pthread_mutex_t collector_mtx;
+static bool sync_started = 0;
 
 
 bool cmp_slice(const struct slice& a, const struct slice& b)
@@ -63,6 +65,10 @@ string get_dev()
         pcap_if_t *d;
         char errbuf[PCAP_ERRBUF_SIZE];
         string result;
+
+        #ifdef DEBUG
+        return "wlp3s0";
+        #endif
 
         if(pcap_findalldevs(&alldevs, errbuf) == -1)
         {
@@ -125,6 +131,7 @@ void reject_session(mac_id_pair_t p)
         rjt_s.session_id = p.second;
         send_session(rjt_s);
         forget_session(p);
+        printf("reject %d\n", p.second);
 
 }
 
@@ -254,7 +261,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         mcid_pair.second = cntl_cd.session_id;
 
         //if meet a new session, contruct a bed for it
-        if(session_map.find(make_pair(mac, cntl_cd.session_id)) == session_map.end()) {
+        if(session_map.find(mcid_pair) == session_map.end()) {
 
                 struct slice_set sset;
 
@@ -321,15 +328,25 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                         pthread_mutex_unlock(&collector_mtx);
                         return -3;
                 }
-//call cfb      process_session(session);
+
+                process_session(&s);
+
                 #ifdef DEBUG
                 print_session(s);
                 #endif
+
                 forget_session(mcid_pair);
 
         }
 
         pthread_mutex_unlock(&collector_mtx);
+        printf("mac ");
+        for(int i = 0; i < 6; ++i) {
+                printf("%2x", mcid_pair.first[i]);
+        }
+        printf(", id %d, slice %d, begin: %d, end: %d\n", mcid_pair.second, cntl_cd.slice_nr, cntl_cd.begin, cntl_cd.end);
+        printf("slc_set status: total %d, current %d\n", slc_set.total, slc_set.slices.size());
+        putchar('\n');
 
         return 0;
 }
@@ -357,6 +374,28 @@ void collector(u_char *args, const struct pcap_pkthdr *header, const u_char *buf
         struct ether_header* eth_hdr;
 
         eth_hdr = (struct ether_header *) buffer;
+/*
+        printf("Grabbed buffer of length %d\n",header->len);
+        printf("Ethernet address length is %d\n", 6);
+        auto eptr = (struct ether_header *) buffer;
+        int i;
+        printf("Ethernet type %x not IP", ntohs(eptr->ether_type));
+        auto ptr = eptr->ether_dhost;
+        i = ETHER_ADDR_LEN;
+        printf(" Destination Address: ");
+        do{
+
+                printf("%s%x",(i == 6) ? " " : ":",*ptr++);
+        }while(--i>0);
+        printf("\n");
+        ptr = eptr->ether_shost;
+        i = ETHER_ADDR_LEN;
+        printf(" Source Address: ");
+        do{
+                printf("%s%x",(i == 6) ? " " : ":",*ptr++);
+        }while(--i>0);
+        printf("\n");
+*/
         if(is_interesting(eth_hdr)) {
                 process_dgram(buffer+sizeof(struct ether_header), header->len-sizeof(struct ether_header), eth_hdr->ether_shost);
         }
@@ -375,22 +414,10 @@ void start_collector()
 
         //read config
         configure = mac_configure("Config.txt");
-        for(auto iter = 0; iter < configure.list_len; ++iter) {
-                uint8_t *ptr = configure.dest_macs[iter];
-                int i = ETHER_ADDR_LEN;
-                printf(" Destination Address: ");
-                do{
 
-                        printf("%s%x",(i == ETHER_ADDR_LEN) ? " " : ":",*ptr++);
-                }while(--i>0);
-                printf("\n");
-        }
         //set up pcap
-        #ifdef DEBUG
-        dev = "wlp3s0";
-        #else
         dev = get_dev();
-        #endif
+
         descr = pcap_open_live(dev.c_str(), BUFSIZ, 1, 0, errbuf);
 
         if(NULL == descr) {
@@ -405,42 +432,4 @@ void start_collector()
 void destroy_collector()
 {
         pthread_mutex_destroy(&collector_mtx);
-}
-
-int main()
-{
-
-        uint8_t test_dgram[BUFFER_SIZE];
-        char c;
-        size_t len = 0;
-        struct pcap_pkthdr header;
-
-        configure = mac_configure("Config.txt");
-        while(EOF != (c = getchar()))
-        {
-                test_dgram[len++] = c;
-        }
-
-        header.len = len;
-        collector(NULL, &header, test_dgram);
-
-        // start_collector();
-
-/*
-        struct session s;
-        s.type = SESSION_ADD;
-        s.session_id = 3;
-        s.source_mac[0] = 0x33;
-        s.source_mac[1] = 0x44;
-        s.source_mac[2] = 0x55;
-        s.source_mac[3] = 0x66;
-        s.source_mac[4] = 0x77;
-        s.source_mac[5] = 0x88;
-        s.info_list.push_back({"U201514795", "fuck", "Information security"});
-        s.info_list.push_back({"U201517777", "you",  "Security information"});
-
-        init_sender();
-        send_session(s);
-*/
-        return 0;
 }

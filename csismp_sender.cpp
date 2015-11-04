@@ -23,8 +23,6 @@ extern "C" {
 #include "mac_configure.h"
 
 
-#define DEBUG
-
 using namespace std;
 
 static struct mac_configure config;
@@ -107,7 +105,7 @@ int send_session(const struct session& s)
 {
         struct control_code cntl;
         uint8_t curr_state;  //0, 1, 2 : id, name, faulty
-        uint8_t curr_size, curr_nr;
+        uint32_t curr_size, curr_nr;
         vector<struct tlv> tlvs;
 
         cntl.type = s.type;
