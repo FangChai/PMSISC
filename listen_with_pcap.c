@@ -47,7 +47,7 @@ bool check_packet(const struct csismp_header *packet)
 
     return true;
 }
-void got_packet(uchar* args,const struct pcap_pkthdr *header,const u_char *packet)
+void got_packet(uchar* args,const struct pcap_pkthdr *header_,const u_char *packet)
 {
     const struct csismp_header *header;
     const struct tlvs *payload;
