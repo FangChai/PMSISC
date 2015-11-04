@@ -42,4 +42,6 @@ struct slice_set {
         vector<struct slice> slices;
 };
 
+string get_dev();
+
 #endif

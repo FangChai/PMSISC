@@ -20,6 +20,7 @@ extern "C" {
 #include "session.h"
 #include "timer.h"
 #include "csismp_collector.h"
+#include "csismp_sender.h"
 #include "mac_configure.h"
 
 
@@ -30,6 +31,7 @@ using namespace std;
 
 static const uint8_t sync_mac[6] = {0x01, 0x80, 0xc2, 0xdd, 0xfe, 0xff};
 static map<uint32_t, struct slice_set> session_map;
+static map<uint32_t, vector<uint8_t>> mac_map;
 static struct mac_configure configure;
 static pthread_mutex_t collector_mtx;
 
@@ -100,10 +102,24 @@ void parse_control(struct control_code* ctrl, const uint8_t* raw)
 void forget_session(uint32_t id)
 {
         pthread_mutex_trylock(&collector_mtx); //signal handler should not be blocked
-
         session_map.erase(id);
-
+        mac_map.erase(id);
         pthread_mutex_unlock(&collector_mtx);
+
+}
+
+void reject_session(uint32_t id)
+{
+        struct session rjt_s;
+
+        rjt_s.type = SESSION_RJT;
+        for(int i = 0; i < 6; i++)
+                rjt_s.source_mac[i] = mac_map[id][i];
+
+        rjt_s.session_id = id;
+        send_session(rjt_s);
+        forget_session(id);
+
 }
 
 int get_tlv(struct tlv* t,  const uint8_t* raw)
@@ -212,9 +228,9 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
         slc.slice_nr = cntl_cd.slice_nr;
 
-        //if meet a new session, contruct a bed for it
         pthread_mutex_lock(&collector_mtx);
 
+        //if meet a new session, contruct a bed for it
         if(session_map.find(cntl_cd.session_id) == session_map.end()) {
 
                 struct slice_set sset;
@@ -222,10 +238,25 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                 sset.total = 0;
                 session_map[cntl_cd.session_id] = sset;
 
+                for(int i = 0; i < 6; i++) {
+                        mac_map[cntl_cd.session_id].push_back(source_mac[i]);
+                }
+
                 add_timer(cntl_cd.session_id);
         }
 
+
         pthread_mutex_unlock(&collector_mtx);
+
+        if(len + sizeof(struct ether_header) > MAX_DGRAM_LEN) {
+                reject_session(cntl_cd.session_id);
+                return -1;
+        }
+        //conflicting source_mac
+        if(cmp_mac(mac_map[cntl_cd.session_id].data(), source_mac)) {
+                reject_session(cntl_cd.session_id);
+                return -1;
+        }
 
         //decompose the raw dgram to tlvs
         err_flag = end_flag = 0;
@@ -255,15 +286,13 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
         //if encountered error, report to the caller
         if(err_flag || !end_flag) {
-                forget_session(cntl_cd.session_id);
-                return -1;
+                reject_session(cntl_cd.session_id);
+                return -2;
         }
-
 
         //update the corresponding slice_set
 
         pthread_mutex_lock(&collector_mtx);
-
         struct slice_set& slc_set = session_map[cntl_cd.session_id];
         if(cntl_cd.end)
                 slc_set.total = cntl_cd.slice_nr + 1;
@@ -276,10 +305,11 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                         s.source_mac[i] = source_mac[i];
 
                 if(construct_session(cntl_cd.session_id, &s, cntl_cd.type) == -1) {
-                        forget_session(cntl_cd.session_id);
-                        return -1;
+                        reject_session(cntl_cd.session_id);
+                        pthread_mutex_unlock(&collector_mtx);
+                        return -3;
                 }
-//CALL CFB                if(0 != process_session(&s)) send_rjt(s.session_id);
+//call cfb      process_session(session);
                 forget_session(cntl_cd.session_id);
 
         }
@@ -306,23 +336,14 @@ int is_interesting(const ether_header* eth_hdr)
         return 0;
 }
 
-void send_rjt()
-{
-        cout<<"rjt"<<endl;
-}
-
 void collector(u_char *args, const struct pcap_pkthdr *header, const u_char *buffer)
 {
 
         struct ether_header* eth_hdr;
-        if( header->len >= MAX_DGRAM_LEN)
-                send_rjt();
 
         eth_hdr = (struct ether_header *) buffer;
         if(is_interesting(eth_hdr)) {
-
-                if(-1 == process_dgram(buffer+sizeof(struct ether_header), header->len-sizeof(struct ether_header), eth_hdr->ether_shost));
-                        send_rjt();
+                process_dgram(buffer+sizeof(struct ether_header), header->len-sizeof(struct ether_header), eth_hdr->ether_shost);
         }
 
 }
