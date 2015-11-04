@@ -1,8 +1,10 @@
 #ifndef TIMER_H
 #define TIMER_H
 
-int init_timer(void (*func)(uint32_t));
-int add_timer(uint32_t id);
-int del_timer(uint32_t id);
+#include "csismp_collector.h"
+
+int init_timer(void (*func)(mac_id_pair_t));
+int add_timer(mac_id_pair_t p);
+int del_timer(mac_id_pair_t p);
 
 #endif

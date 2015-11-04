@@ -16,10 +16,8 @@ extern "C" {
 
 using namespace std;
 
-
-
-static map<uint32_t, uint32_t> timer_map;
-static void (*call_back)(uint32_t);
+static map<mac_id_pair_t, uint32_t> timer_map;
+static void (*call_back)(mac_id_pair_t);
 static uint32_t max_time;
 
 static void time_out(int sig)
@@ -37,7 +35,7 @@ static void time_out(int sig)
         }
 }
 
-int init_timer(void (*func)(uint32_t))
+int init_timer(void (*func)(mac_id_pair_t))
 {
         struct itimerval tmr_val;
 
@@ -53,15 +51,15 @@ int init_timer(void (*func)(uint32_t))
 }
 
 
-int add_timer(uint32_t id)
+int add_timer(mac_id_pair_t p)
 {
-        timer_map[id] = 0;
+        timer_map[p] = 0;
 }
 
-int del_timer(uint32_t id)
+int del_timer(mac_id_pair_t p)
 {
-        auto iter_found  = timer_map.find(id);
+        auto iter_found  = timer_map.find(p);
         if(timer_map.end() != iter_found) {
-                timer_map.erase(id);
+                timer_map.erase(p);
         }
 }

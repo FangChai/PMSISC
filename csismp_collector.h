@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <cinttypes>
+#include "session.h"
 
 using namespace std;
 
@@ -41,5 +42,9 @@ struct slice_set {
         uint32_t total;
         vector<struct slice> slices;
 };
+
+typedef pair<vector<uint8_t>, uint32_t> mac_id_pair_t;
+
+string get_dev();
 
 #endif
