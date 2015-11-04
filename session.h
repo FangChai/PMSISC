@@ -23,6 +23,7 @@ struct student_info {
 
 struct session {
         uint32_t session_id;
+        uint8_t* source_mac[6];
         session_type type;
         vector<struct student_info> info_list;
 };
