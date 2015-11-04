@@ -42,10 +42,4 @@ struct slice_set {
         vector<struct slice> slices;
 };
 
-struct mac_configure {
-        uint8_t dest_macs[256][6];
-        size_t  list_len;
-        uint8_t local_mac[6];
-};
-
 #endif

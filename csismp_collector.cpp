@@ -6,18 +6,24 @@ extern "C" {
 #include <unistd.h>
 #include <pthread.h>
 #include <endian.h>
+#include <pcap.h>
 }
 
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <map>
 #include <mutex>
 #include <algorithm>
+#include <cstring>
 #include "csismp_limits.h"
 #include "session.h"
 #include "timer.h"
 #include "csismp_collector.h"
+#include "mac_configure.h"
 
+
+#define DEBUG
 
 using namespace std;
 
@@ -45,6 +51,35 @@ int cmp_mac(const uint8_t mac1[], const uint8_t mac2[])
 
         return result;
 }
+
+string get_dev()
+{
+        pcap_if_t *alldevs;
+        pcap_if_t *d;
+        char errbuf[PCAP_ERRBUF_SIZE];
+        string result;
+
+        if(pcap_findalldevs(&alldevs, errbuf) == -1)
+        {
+                fprintf(stderr,"Error in pcap_findalldevs_ex: %s/n", errbuf);
+                exit(1);
+        }
+
+        for(d = alldevs->next; d != NULL; d = d->next)
+        {
+                if(result.size() == 0 && strcmp(d->name, "any")) {
+                        result = string(d->name);
+                        continue;
+                } else if(strcmp(d->name, result.c_str()) <=0
+                              &&(strcmp(d->name, "any")))
+                        result = string(d->name);
+        }
+
+        pcap_freealldevs(alldevs);
+
+        return result;
+}
+
 
 //get control code, and adjust the byte order
 void parse_control(struct control_code* ctrl, const uint8_t* raw)
@@ -163,14 +198,13 @@ int construct_session(uint32_t id, struct session* s, session_type type)
         return 0;
 }
 
-int process_dgram(const uint8_t* raw, int len)
+int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 {
         const uint8_t* curr = raw;
         int remain = len;
         struct control_code cntl_cd;
         struct slice slc;
         uint8_t err_flag, end_flag;
-
 
         parse_control(&cntl_cd, curr);
         curr += CONTROL_LEN;
@@ -238,11 +272,14 @@ int process_dgram(const uint8_t* raw, int len)
         if((slc_set.total != 0) &&  (slc_set.slices.size() == slc_set.total)) {
                 struct session s;
 
+                for(int i = 0; i < 6; ++i)
+                        s.source_mac[i] = source_mac[i];
+
                 if(construct_session(cntl_cd.session_id, &s, cntl_cd.type) == -1) {
                         forget_session(cntl_cd.session_id);
                         return -1;
                 }
-//CALL CFB                process_session(&s);
+//CALL CFB                if(0 != process_session(&s)) send_rjt(s.session_id);
                 forget_session(cntl_cd.session_id);
 
         }
@@ -252,81 +289,105 @@ int process_dgram(const uint8_t* raw, int len)
         return 0;
 }
 
-int is_interesting(const ethhdr* eth_hdr)
+int is_interesting(const ether_header* eth_hdr)
 {
-        if( eth_hdr->h_proto != CSISMP_PROTO || !cmp_mac(eth_hdr->h_source, configure.local_mac))
+        if(ntohs(eth_hdr->ether_type) != CSISMP_PROTO || !cmp_mac(eth_hdr->ether_shost, configure.local_mac))
                 return 0;
 
         //broadcast
-        if(!cmp_mac(eth_hdr->h_dest, sync_mac))
+        if(!cmp_mac(eth_hdr->ether_dhost, sync_mac))
                 return 1;
 
         for(size_t i = 0; i < configure.list_len; ++i) {
-                if(!cmp_mac(eth_hdr->h_dest, configure.dest_macs[i]))
+                if(!cmp_mac(eth_hdr->ether_dhost, configure.dest_macs[i]))
                         return 1;
         }
 
         return 0;
 }
+
 void send_rjt()
 {
+        cout<<"rjt"<<endl;
 }
-int collect_loop()
+
+void collector(u_char *args, const struct pcap_pkthdr *header, const u_char *buffer)
 {
-        int packet_sock;
-        uint8_t buffer[BUFFER_SIZE];
-        struct ethhdr* eth_hdr;
 
-        if(0 > (packet_sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL)))) {
-                perror("socket");
-                exit(1);
-        }
+        struct ether_header* eth_hdr;
+        if( header->len >= MAX_DGRAM_LEN)
+                send_rjt();
 
-        for(;;) {
-                int n;
+        eth_hdr = (struct ether_header *) buffer;
+        if(is_interesting(eth_hdr)) {
 
-                n = recv(packet_sock, buffer, sizeof(buffer), 0);
-                if( n >= MAX_DGRAM_LEN)
+                if(-1 == process_dgram(buffer+sizeof(struct ether_header), header->len-sizeof(struct ether_header), eth_hdr->ether_shost));
                         send_rjt();
-
-                eth_hdr = (struct ethhdr *) buffer;
-                if(is_interesting(eth_hdr)) {
-
-                        if(-1 == process_dgram(buffer+sizeof(struct ethhdr), n-sizeof(struct ethhdr)))
-                                send_rjt();
-                }
         }
 
 }
 
 void init_collector()
 {
+        string dev;
+        char errbuf[PCAP_ERRBUF_SIZE];
+        pcap_t* descr;
+
+        //set up the lock and the timer
         pthread_mutex_init(&collector_mtx, NULL);
         init_timer(forget_session);
+
+        //read config
+        configure = mac_configure("Config.txt");
+        for(auto iter = 0; iter < configure.list_len; ++iter) {
+                uint8_t *ptr = configure.dest_macs[iter];
+                int i = ETHER_ADDR_LEN;
+                printf(" Destination Address: ");
+                do{
+
+                        printf("%s%x",(i == ETHER_ADDR_LEN) ? " " : ":",*ptr++);
+                }while(--i>0);
+                printf("\n");
+        }
+        //set up pcap
+        #ifdef DEBUG
+        dev = "wlp3s0";
+        #else
+        dev = get_dev();
+        #endif
+        descr = pcap_open_live(dev.c_str(), BUFSIZ, 1, 0, errbuf);
+
+        if(NULL == descr) {
+                printf("pcap_open_live(): %s\n",errbuf);
+                exit(1);
+        }
+
+        pcap_loop(descr, -1, collector, NULL);
+
 }
 
 void destroy_collector()
 {
         pthread_mutex_destroy(&collector_mtx);
 }
+
 int main()
 {
-        configure.dest_macs[0][0] = 0x40;
-        configure.dest_macs[0][1] = 0xe2;
-        configure.dest_macs[0][2] = 0x30;
-        configure.dest_macs[0][3] = 0xff;
-        configure.dest_macs[0][4] = 0x22;
-        configure.dest_macs[0][5] = 0x35;
-        configure.list_len++;
 
         uint8_t test_dgram[BUFFER_SIZE];
         char c;
         size_t len;
+        struct pcap_pkthdr header;
+
         while(EOF != (c = getchar()))
         {
                 test_dgram[len++] = c;
         }
-        process_dgram(test_dgram+sizeof(struct ethhdr), len);
+
+        header.len = len;
+//        collector(NULL, &header, test_dgram);
+
+        init_collector();
 
         return 0;
 }
