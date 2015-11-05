@@ -173,6 +173,7 @@ void process_session(session *conv)
                                                  if(!success_once) success=false;
                                          }
                                  });
+                        pthread_mutex_unlock(&local_data_mutex);
                         if(!success){
                                 session rjt_msg=construct_rjtmsg(conv);
                                 send_session(rjt_msg);

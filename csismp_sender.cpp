@@ -167,7 +167,7 @@ int send_session(const struct session& s)
                         curr_size += iter->name.size() + 1 + TLV_HEAD_LEN;
 
                 } else if(2 == curr_state) {
-                        if(curr_size + iter->id.size() + 3 + TLV_HEAD_LEN > MAX_TLVS_LEN) {
+                        if(curr_size + iter->faculty.size() + 3 + TLV_HEAD_LEN > MAX_TLVS_LEN) {
                                 tlvs.push_back({TLV_END, 0, ""});
 
                                 cntl.begin = curr_nr ? 0 : 1;

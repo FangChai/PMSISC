@@ -148,8 +148,8 @@ int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len)
 
         case TLV_ID:
                 t->len = raw[1];
-                if(raw[1 + t->len] != '\0' || t->len > ID_LEN
-                   || t->len < 2 || len < t->len  + TLV_HEAD_LEN)
+                if((raw[1 + t->len] != '\0') || (t->len > ID_LEN)
+                   || (t->len < 2) || (len  < t->len  + TLV_HEAD_LEN))
                         return - 1;
                 t->data = string((const char *)(raw+2), t->len - 1);
                 return t->len + 2;
@@ -157,8 +157,8 @@ int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len)
 
         case TLV_NAME:
                 t->len = raw[1];
-                if(raw[1 + t->len] != '\0' || t->len > NAME_LEN
-                   || t->len < 2 || len < t->len + TLV_HEAD_LEN)
+                if((raw[1 + t->len] != '\0') || (t->len > NAME_LEN)
+                   || (t->len < 2) || (len  < t->len + TLV_HEAD_LEN))
                         return - 1;
                 t->data = string((const char *)(raw+2), t->len - 1);
                 return t->len + 2;
@@ -166,8 +166,8 @@ int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len)
 
         case TLV_FACULTY:
                 t->len = raw[1];
-                if(raw[1 + t->len] != '\0' || t->len > FACULTY_LEN
-                   || t->len < 2 || len < t->len + TLV_HEAD_LEN)
+                if((raw[1 + t->len] != '\0') || (t->len > FACULTY_LEN)
+                   || (t->len < 2) || (len < t->len + TLV_HEAD_LEN))
                         return - 1;
                 t->data = string((const char *)(raw+2), t->len - 1);
                 return t->len + 2;
@@ -184,6 +184,7 @@ int construct_session(mac_id_pair_t p, struct session* s, session_type type)
 {
         struct slice_set& slc_set = session_map[p];
         uint8_t curr_state = 0;    //0, 1, 2 : id, name, faculty
+        uint32_t prev_slice_nr;    //for validation checking
 
         s->session_id = p.second;
         s->type = type;
@@ -192,6 +193,14 @@ int construct_session(mac_id_pair_t p, struct session* s, session_type type)
                 s->source_mac[i] = p.first[i];
 
         sort(slc_set.slices.begin(), slc_set.slices.end(), cmp_slice);
+
+        //check the validation of the slice_nrs
+        prev_slice_nr = slc_set.slices.begin()->slice_nr;
+        for(auto iter = slc_set.slices.begin() + 1; iter != slc_set.slices.end(); ++prev_slice_nr, ++iter) {
+                if((prev_slice_nr + 1) != iter->slice_nr)
+                        return -1;
+        }
+
         if(type == SESSION_ADD) {
                 curr_state = 0;
                 struct student_info stu_info;
@@ -275,6 +284,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         pthread_mutex_unlock(&collector_mtx);
 
         if(len + sizeof(struct ether_header) > MAX_DGRAM_LEN) {
+                puts("slice too long\n");
                 reject_session(mcid_pair);
                 return -1;
         }
@@ -322,8 +332,8 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         if((slc_set.total != 0) &&  (slc_set.slices.size() == slc_set.total)) {
                 struct session s;
 
-                //fill id, type, info_list, mac
-                if(construct_session(mcid_pair, &s, cntl_cd.type) == -1) {
+                //fill id, type, info_list, mac, check the slice_nr
+                if(construct_session(mcid_pair, &s, cntl_cd.type) < 0) {
                         reject_session(mcid_pair);
                         pthread_mutex_unlock(&collector_mtx);
                         return -3;
