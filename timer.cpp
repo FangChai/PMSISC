@@ -17,7 +17,8 @@ extern "C" {
 using namespace std;
 
 static map<mac_id_pair_t, uint32_t> timer_map;
-static void (*call_back)(mac_id_pair_t);
+static map<mac_id_pair_t, session_type> type_map;
+static void (*call_back)(mac_id_pair_t, session_type);
 static uint32_t max_time;
 
 static void time_out(int sig)
@@ -29,13 +30,13 @@ static void time_out(int sig)
 
         for(auto iter = timer_map.begin(); iter != timer_map.end(); ++iter) {
                 if(iter->second >= OUT_TIME) {
-                         call_back(iter->first);
-                         del_timer(iter->first);
+                        call_back(iter->first, type_map[iter->first]);
+                        del_timer(iter->first);
                  }
         }
 }
 
-int init_timer(void (*func)(mac_id_pair_t))
+int init_timer(void (*func)(mac_id_pair_t, session_type))
 {
         struct itimerval tmr_val;
 
@@ -51,9 +52,10 @@ int init_timer(void (*func)(mac_id_pair_t))
 }
 
 
-int add_timer(mac_id_pair_t p)
+int add_timer(mac_id_pair_t p, session_type type)
 {
         timer_map[p] = 0;
+        type_map[p] = type;
 }
 
 int del_timer(mac_id_pair_t p)
@@ -61,5 +63,6 @@ int del_timer(mac_id_pair_t p)
         auto iter_found  = timer_map.find(p);
         if(timer_map.end() != iter_found) {
                 timer_map.erase(p);
+                type_map.erase(p);
         }
 }

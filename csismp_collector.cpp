@@ -116,13 +116,20 @@ void forget_session(mac_id_pair_t p)
 
 }
 
-void reject_session(mac_id_pair_t p)
+void reject_session(mac_id_pair_t p, session_type type)
 {
         struct session rjt_s;
 
-        //if all read forgotten, then we don't care
+        //if already forgotten, then we don't care
         if(session_map.end() == session_map.find(p))
                 return;
+
+        //don't send rjt to sync sessions
+        if(SESSION_SYN == type) {
+                forget_session(p);
+                printf("ignore sync session %d", p.second);
+                return;
+        }
 
         rjt_s.type = SESSION_RJT;
         for(int i = 0; i < 6; i++)
@@ -201,7 +208,7 @@ int construct_session(mac_id_pair_t p, struct session* s, session_type type)
                         return -1;
         }
 
-        if(type == SESSION_ADD) {
+        if(type == SESSION_ADD || type == SESSION_SYN) {
                 curr_state = 0;
                 struct student_info stu_info;
 
@@ -277,7 +284,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                 sset.total = 0;
                 session_map[mcid_pair] = sset;
 
-                add_timer(mcid_pair);
+                add_timer(mcid_pair, cntl_cd.type);
         }
 
 
@@ -285,7 +292,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
         if(len + sizeof(struct ether_header) > MAX_DGRAM_LEN) {
                 puts("slice too long\n");
-                reject_session(mcid_pair);
+                reject_session(mcid_pair, cntl_cd.type);
                 return -1;
         }
 
@@ -317,7 +324,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
         //if encountered error, report to the caller
         if(err_flag || !end_flag) {
-                reject_session(mcid_pair);
+                reject_session(mcid_pair, cntl_cd.type);
                 return -2;
         }
 
@@ -334,7 +341,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
                 //fill id, type, info_list, mac, check the slice_nr
                 if(construct_session(mcid_pair, &s, cntl_cd.type) < 0) {
-                        reject_session(mcid_pair);
+                        reject_session(mcid_pair, cntl_cd.type);
                         pthread_mutex_unlock(&collector_mtx);
                         return -3;
                 }
