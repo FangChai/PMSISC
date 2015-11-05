@@ -144,7 +144,7 @@ void process_session(session *conv)
                                             });
                         auto diff=local_data.end()-new_end;
                         local_data.erase(new_end,local_data.end());
-                        if(update_count!=diff)
+                        if(update_count!=diff||(update_count==0&&diff==0))
                                 print_all_students();
                         pthread_mutex_unlock(&local_data_mutex);
                         session ack_msg=construct_ackmsg(conv);
@@ -239,13 +239,11 @@ void *on_timer_up()
         broadcast_session.source_mac[5]=0xFF;
 
         send_session(broadcast_session);
-        //TODO
-        //Send MSG.
 }
 void Timer_Send()
 {
         for(;;){
-                std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+                std::this_thread::sleep_for(std::chrono::milliseconds(30000));
                 on_timer_up();
         }
 }
