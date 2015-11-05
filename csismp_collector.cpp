@@ -108,11 +108,9 @@ void parse_control(struct control_code* ctrl, const uint8_t* raw)
         ctrl->session_id = be32toh(ctrl->session_id);
 }
 
-void forget_session(mac_id_pair_t p)
+inline void forget_session(mac_id_pair_t p)
 {
-        pthread_mutex_trylock(&collector_mtx); //signal handler should not be blocked
         session_map.erase(p);
-        pthread_mutex_unlock(&collector_mtx);
 
 }
 
@@ -120,14 +118,22 @@ void reject_session(mac_id_pair_t p, session_type type)
 {
         struct session rjt_s;
 
-        //if already forgotten, then we don't care
-        if(session_map.end() == session_map.find(p))
+        if(EBUSY ==  pthread_mutex_trylock(&collector_mtx))  //signal handler should not be blocked
                 return;
+
+        //if already forgotten, then we don't care
+        if(session_map.end() == session_map.find(p)) {
+                printf("%d is already forgotten\n", p.second);
+
+                pthread_mutex_unlock(&collector_mtx);
+                return;
+        }
 
         //don't send rjt to sync sessions
         if(SESSION_SYN == type) {
                 forget_session(p);
-                printf("ignore sync session %d", p.second);
+                printf("ignore sync session %d\n", p.second);
+                pthread_mutex_unlock(&collector_mtx);
                 return;
         }
 
@@ -139,6 +145,8 @@ void reject_session(mac_id_pair_t p, session_type type)
         send_session(rjt_s);
         forget_session(p);
         printf("reject %d\n", p.second);
+
+        pthread_mutex_unlock(&collector_mtx);
 
 }
 
@@ -204,8 +212,10 @@ int construct_session(mac_id_pair_t p, struct session* s, session_type type)
         //check the validation of the slice_nrs
         prev_slice_nr = slc_set.slices.begin()->slice_nr;
         for(auto iter = slc_set.slices.begin() + 1; iter != slc_set.slices.end(); ++prev_slice_nr, ++iter) {
-                if((prev_slice_nr + 1) != iter->slice_nr)
+                if((prev_slice_nr + 1) != iter->slice_nr) {
+                        puts("slice number abnormal");
                         return -1;
+                }
         }
 
         if(type == SESSION_ADD || type == SESSION_SYN) {
@@ -339,10 +349,14 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         if((slc_set.total != 0) &&  (slc_set.slices.size() == slc_set.total)) {
                 struct session s;
 
+                //enough of slices, timer is no longer need
+                del_timer(mcid_pair);
+
                 //fill id, type, info_list, mac, check the slice_nr
                 if(construct_session(mcid_pair, &s, cntl_cd.type) < 0) {
-                        reject_session(mcid_pair, cntl_cd.type);
                         pthread_mutex_unlock(&collector_mtx);
+
+                        reject_session(mcid_pair, cntl_cd.type);
                         return -3;
                 }
 
@@ -355,7 +369,6 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                 forget_session(mcid_pair);
 
         }
-
         pthread_mutex_unlock(&collector_mtx);
         printf("mac ");
         for(int i = 0; i < 6; ++i) {

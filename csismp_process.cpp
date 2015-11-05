@@ -124,11 +124,7 @@ session construct_rjtmsg(session * _session)
 void process_session(session *conv)
 {
         printf("started process session %d\n",conv->session_id);
-        if(!sync_started){
-                sync_started=true;
-                indiv_timer=thread(Timer_Send);
-                printf("timer started\n");
-        }
+
         switch(conv->type){
         case session_type::SESSION_ADD:
         {
@@ -152,6 +148,14 @@ void process_session(session *conv)
                         pthread_mutex_unlock(&local_data_mutex);
                         session ack_msg=construct_ackmsg(conv);
                         send_session(ack_msg);
+
+                        //if first add succeed, start the timer
+                        if(!sync_started){
+                                sync_started=true;
+                                indiv_timer=thread(Timer_Send);
+                                printf("timer started\n");
+                        }
+
                 }
                 else {
                         session rjt_msg=construct_rjtmsg(conv);
