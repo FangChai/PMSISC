@@ -139,13 +139,17 @@ void process_session(session *conv)
                                     {
                                             return a.id<b.id ;
                                     });
-                        auto new_end=unique(local_data.begin(),local_data.end(),[] (const student_info &a,const student_info &b)
+                        size_t update_count=0;
+                        auto new_end=unique(local_data.begin(),local_data.end(),[&] (const student_info &a,const student_info &b)
                                             {
+                                                    if(a.id==b.id&&a.name==b.name&&a.faculty==b.faculty)
+                                                        update_count++;
                                                     return a.id==b.id;
                                             });
+                        if(update_count!=local_data.end()-new_end)
+                                print_all_students();
                         local_data.erase(new_end,local_data.end());
                         pthread_mutex_unlock(&local_data_mutex);
-                        print_all_students();
                         session ack_msg=construct_ackmsg(conv);
                         send_session(ack_msg);
                 }
@@ -181,10 +185,10 @@ void process_session(session *conv)
                         else {
                                 session ack_msg=construct_ackmsg(conv);
                                 send_session(ack_msg);
+                                print_all_students();
                         }
                 }
         }
-        print_all_students();
         break;
         case session_type::SESSION_ACK:
                 break;
