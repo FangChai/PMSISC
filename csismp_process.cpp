@@ -192,6 +192,10 @@ void process_session(session *conv)
                                 print_all_students();
                         }
                 }
+                else {
+                    session rjt_msg=construct_rjtmsg(conv);
+                    send_session(rjt_msg);
+                }
         }
         break;
         case session_type::SESSION_ACK:
