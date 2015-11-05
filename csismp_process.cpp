@@ -142,9 +142,10 @@ void process_session(session *conv)
                                                         update_count++;
                                                     return a.id==b.id;
                                             });
-                        if(update_count!=local_data.end()-new_end)
-                                print_all_students();
+                        auto diff=local_data.end()-new_end;
                         local_data.erase(new_end,local_data.end());
+                        if(update_count!=diff)
+                                print_all_students();
                         pthread_mutex_unlock(&local_data_mutex);
                         session ack_msg=construct_ackmsg(conv);
                         send_session(ack_msg);
