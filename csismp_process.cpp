@@ -141,8 +141,9 @@ session construct_rjtmsg(session * _session)
         }
         return ret;
 }
-void process_session(session *conv)
+void* process_session(void  *_conv)
 {
+        auto conv=(session *) _conv;
         printf("started process session %d\n",conv->session_id);
 
         switch(conv->type){
