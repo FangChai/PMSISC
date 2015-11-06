@@ -250,14 +250,37 @@ void* process_session(void  *_conv)
         case session_type::SESSION_SYN:
         {
                 pthread_mutex_lock(&sync_data_mutex);
+
                 //Construct MacAddr
                 MacAddr addr;
-                for(int i = 0;i<6;++i)
-                        addr[i] = conv->source_mac[i];
-                auto &current_sync_data  =  sync_data[addr];
-                current_sync_data.clear();
-                copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(current_sync_data));
+                for(int i=0;i<6;++i)
+                        addr[i]=conv->source_mac[i];
+
+                auto &current_sync_data = sync_data[addr];
+                if(check_valid(*conv)){
+                        copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(current_sync_data));
+                        stable_sort(current_sync_data.begin(),current_sync_data.end(),[](const student_info &a,const student_info &b)
+                                    {
+                                            return a.id<b.id ;
+                                    });
+                        size_t update_count=0;
+                        auto new_end=unique(current_sync_data.begin(),current_sync_data.end(),[&] (const student_info &a,const student_info &b)
+                                            {
+                                                    if(a.id==b.id&&a.name==b.name&&a.faculty==b.faculty)
+                                                            update_count++;
+                                                    return a.id==b.id;
+                                            });
+                        auto diff = current_sync_data.end()-new_end;
+                        current_sync_data.erase(new_end,current_sync_data.end());
+                        if(update_count!=diff||(update_count==0&&diff==0)){
+                                current_sync_data.clear();
+                                current_sync_data.assign(conv->info_list.begin(),conv->info_list.end());
+                                print_all_students();
+                        }
+                }
+
                 pthread_mutex_unlock(&sync_data_mutex);
+
         }
         break;
         default:
