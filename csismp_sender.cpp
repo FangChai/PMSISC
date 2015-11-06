@@ -42,10 +42,10 @@ static inline uint32_t tlvs_len(const vector<struct tlv>& tlvs)
 
 static inline void send_raw(uint8_t* dgram, int size)
 {
-#ifndef DEBUG
+
         if(-1 == pcap_sendpacket(descr, dgram, size))
                 perror("send failure");
-#else
+#ifdef DEBUG
         FILE *fp = fopen("out_packet", "w");
         fwrite(dgram, size, 1, fp);
 #endif

@@ -272,9 +272,8 @@ void* process_session(void  *_conv)
                                             });
                         auto diff = current_sync_data.end()-new_end;
                         current_sync_data.erase(new_end,current_sync_data.end());
+                        pthread_mutex_unlock(&sync_data_mutex);
                         if(update_count!=diff||(update_count==0&&diff==0)){
-                                current_sync_data.clear();
-                                current_sync_data.assign(conv->info_list.begin(),conv->info_list.end());
                                 print_all_students();
                         }
                 }
