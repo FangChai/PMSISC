@@ -4,6 +4,7 @@ extern "C"{
 #include <thread>
 #include <iostream>
 #include <vector>
+#include <map>
 #include <iterator>
 #include <algorithm>
 #include <fstream>
@@ -16,24 +17,9 @@ extern "C"{
 #include "csismp_sender.h"
 
 using namespace std;
-class mac_addr{
-private:
-    uint8_t addr[6];
-public:
-    mac_addr(uint8_t _addr[]){
-        for(int i=0;i<6;++i)
-            addr[i]=_addr[i];
-    }
-    bool operator==(const mac_addr &lhs,const mac_addr& rhs){
-        for(int i=0;i<6;++i){
-            if(lhs.addr[i]!=rhs.addr[i])
-                return false;
-        }
-        return true;
-    }
-}
+typedef array<uint8_t,6> MacAddr;
 static deque<student_info> local_data;
-static map<mac_addr,deque<student_info>> sync_data;
+static map<MacAddr,deque<student_info>> sync_data;
 static pthread_mutex_t sync_data_mutex;
 static pthread_mutex_t local_data_mutex;
 
@@ -240,7 +226,11 @@ void process_session(session *conv)
         case session_type::SESSION_SYN:
         {
                 pthread_mutex_lock(&sync_data_mutex);
-                auto &current_sync_date = sync_data[mac_addr(conv->source_mac)];
+                //Construct MacAddr
+                MacAddr addr;
+                for(int i=0;i<6;++i)
+                    addr[i]=conv->source_mac[i];
+                auto &current_sync_data = sync_data[addr];
                 current_sync_data.clear();
                 copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(current_sync_data));
                 pthread_mutex_unlock(&sync_data_mutex);
