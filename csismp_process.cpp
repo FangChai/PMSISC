@@ -39,6 +39,7 @@ static pthread_mutex_t local_data_mutex;
 
 static thread indiv_timer;
 static bool sync_started=0;
+static pthread_mutex_t sync_started_mutex;
 
 void Timer_Send();
 
@@ -95,6 +96,7 @@ void print_all_students(){
                         fprintf(fp," ");
                 fprintf(fp,"%s\n",local_data[i].name.data());
         }
+        pthread_mutex_lock(&sync_data_mutex);
         for(auto iter=sync_data.begin();iter!=sync_data.end();++iter){
             auto one_sync_data=iter->second;
             for(int i=0;i<one_sync_data.size();i++){
@@ -114,6 +116,7 @@ void print_all_students(){
                     fprintf(fp,"%s\n",one_sync_data[i].name.data());
             }
         }
+        pthread_mutex_unlock(&sync_data_mutex);
 
         fprintf(fp,"--------------------------------------------------------------------------------\n");
         fclose(fp);
@@ -168,11 +171,13 @@ void process_session(session *conv)
                         session ack_msg=construct_ackmsg(conv);
                         send_session(ack_msg);
                         //if first add succeed, start the timer
+                        pthread_mutex_lock(&sync_started_mutex);
                         if(!sync_started){
                                 sync_started=true;
                                 indiv_timer=thread(Timer_Send);
                                 printf("timer started\n");
                         }
+                        pthread_mutex_unlock(&sync_started_mutex);
                 }
                 else {
                         session rjt_msg=construct_rjtmsg(conv);
