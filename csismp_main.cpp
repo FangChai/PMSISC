@@ -6,6 +6,7 @@
 int main()
 {
         init_sender();
+        init_processor();
         start_collector();
 
         return EXIT_SUCCESS;

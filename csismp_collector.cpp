@@ -17,6 +17,7 @@ extern "C" {
 #include <algorithm>
 #include <utility>
 #include <cstring>
+#include <memory>
 #include "csismp_limits.h"
 #include "session.h"
 #include "timer.h"
@@ -347,13 +348,13 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
         slc_set.slices.push_back(slc);
         if((slc_set.total != 0) &&  (slc_set.slices.size() == slc_set.total)) {
-                struct session s;
+                struct session* s = new struct session;
 
                 //enough of slices, timer is no longer need
                 del_timer(mcid_pair);
 
                 //fill id, type, info_list, mac, check the slice_nr
-                if(construct_session(mcid_pair, &s, cntl_cd.type) < 0) {
+                if(construct_session(mcid_pair, s, cntl_cd.type) < 0) {
                         pthread_mutex_unlock(&collector_mtx);
 
                         reject_session(mcid_pair, cntl_cd.type);
@@ -361,12 +362,11 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                 }
 
                 pthread_t th;
-
-                pthread_create(&th, NULL, process_session, (void *)&s);
+                pthread_create(&th, NULL, process_session, (void *)s);
                 pthread_detach(th);
 
                 #ifdef DEBUG
-                print_session(s);
+                print_session(*s);
                 #endif
 
                 forget_session(mcid_pair);
@@ -407,28 +407,7 @@ void collector(u_char *args, const struct pcap_pkthdr *header, const u_char *buf
         struct ether_header* eth_hdr;
 
         eth_hdr = (struct ether_header *) buffer;
-/*
-        printf("Grabbed buffer of length %d\n",header->len);
-        printf("Ethernet address length is %d\n", 6);
-        auto eptr = (struct ether_header *) buffer;
-        int i;
-        printf("Ethernet type %x not IP", ntohs(eptr->ether_type));
-        auto ptr = eptr->ether_dhost;
-        i = ETHER_ADDR_LEN;
-        printf(" Destination Address: ");
-        do{
 
-                printf("%s%x",(i == 6) ? " " : ":",*ptr++);
-        }while(--i>0);
-        printf("\n");
-        ptr = eptr->ether_shost;
-        i = ETHER_ADDR_LEN;
-        printf(" Source Address: ");
-        do{
-                printf("%s%x",(i == 6) ? " " : ":",*ptr++);
-        }while(--i>0);
-        printf("\n");
-*/
         if(is_interesting(eth_hdr)) {
                 process_dgram(buffer+sizeof(struct ether_header), header->len-sizeof(struct ether_header), eth_hdr->ether_shost);
         }

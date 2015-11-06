@@ -29,19 +29,6 @@ static pthread_mutex_t sync_started_mutex;
 
 void Timer_Send();
 
-int cmp_mac(const uint8_t mac1[], const uint8_t mac2[])
-{
-        int result = 0;
-        for(int i = 0; i < 6; i++) {
-                if(mac1[i] != mac2[i]) {
-                        result = mac1[i] - mac2[i];
-                        break;
-                }
-        }
-
-        return result;
-}
-
 bool check_valid(session to_check)
 {
         stable_sort(to_check.info_list.begin(),to_check.info_list.end(),[](const student_info &a,const student_info &b)
@@ -240,6 +227,9 @@ void* process_session(void  *_conv)
         default:
                 break;
         }
+
+        //release the memory allocated by the caller
+        delete conv;
 }
 void *on_timer_up()
 {
@@ -268,3 +258,9 @@ void Timer_Send()
         }
 }
 
+void init_processor()
+{
+        pthread_mutex_init(&local_data_mutex, NULL);
+        pthread_mutex_init(&sync_data_mutex, NULL);
+        pthread_mutex_init(&sync_started_mutex, NULL);
+}
