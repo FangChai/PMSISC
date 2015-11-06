@@ -16,10 +16,25 @@ extern "C"{
 #include "csismp_sender.h"
 
 using namespace std;
-
-
+class mac_addr{
+private:
+    uint8_t addr[6];
+public:
+    mac_addr(uint8_t[] _addr){
+        for(int i=0;i<6;++i)
+            addr[i]=_addr[i];
+    }
+    bool operator==(const mac_addr &lhs,const mac_addr& rhs){
+        for(int i=0;i<6;++i){
+            if(lhs.addr[i]!=rhs.addr[i])
+                return false;
+        }
+        return true;
+    }
+}
 static deque<student_info> local_data;
-static deque<student_info> sync_data;
+static map<mac_addr,deque<student_info>> sync_data;
+static pthread_mutex_t sync_data_mutex;
 static pthread_mutex_t local_data_mutex;
 
 static thread indiv_timer;
@@ -80,21 +95,24 @@ void print_all_students(){
                         fprintf(fp," ");
                 fprintf(fp,"%s\n",local_data[i].name.data());
         }
-        for(int i=0;i<sync_data.size();i++){
-                int line=(sync_data[i].faculty.size()-1)/33;if(line<0)line=0;
-                for(int j=0;j<line;j++){
+        for(auto iter=sync_data.begin();iter!=sync_data.end();++iter){
+            auto one_sync_data=iter->second;
+            for(int i=0;i<one_sync_data.size();i++){
+                    int line=(one_sync_data[i].faculty.size()-1)/33;if(line<0)line=0;
+                    for(int j=0;j<line;j++){
                         for(int k=j*33;k<(j+1)*33;k++)
-                                fprintf(fp,"%c",sync_data[i].faculty[k]);
-                        fprintf(fp,"\n");
-                }
-                for(int j=line*33;j<sync_data[i].faculty.size();j++)
-                        fprintf(fp,"%c",sync_data[i].faculty[j]);
-                for(int j=sync_data[i].faculty.size();j<(line+1)*33;j++)
-                        fprintf(fp," ");
-                fprintf(fp,"   %s",sync_data[i].id.data());
-                for(int j=sync_data[i].id.size();j<17;j++)
-                        fprintf(fp," ");
-                fprintf(fp,"%s\n",sync_data[i].name.data());
+                                fprintf(fp,"%c",one_sync_data[i].faculty[k]);
+                            fprintf(fp,"\n");
+                    }
+                    for(int j=line*33;j<one_sync_data[i].faculty.size();j++)
+                            fprintf(fp,"%c",one_sync_data[i].faculty[j]);
+                    for(int j=one_sync_data[i].faculty.size();j<(line+1)*33;j++)
+                            fprintf(fp," ");
+                    fprintf(fp,"   %s",one_sync_data[i].id.data());
+                    for(int j=one_sync_data[i].id.size();j<17;j++)
+                            fprintf(fp," ");
+                    fprintf(fp,"%s\n",one_sync_data[i].name.data());
+            }
         }
 
         fprintf(fp,"--------------------------------------------------------------------------------\n");
@@ -149,14 +167,12 @@ void process_session(session *conv)
                         pthread_mutex_unlock(&local_data_mutex);
                         session ack_msg=construct_ackmsg(conv);
                         send_session(ack_msg);
-
                         //if first add succeed, start the timer
                         if(!sync_started){
                                 sync_started=true;
                                 indiv_timer=thread(Timer_Send);
                                 printf("timer started\n");
                         }
-
                 }
                 else {
                         session rjt_msg=construct_rjtmsg(conv);
@@ -205,16 +221,11 @@ void process_session(session *conv)
                 break;
         case session_type::SESSION_SYN:
         {
-                copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(sync_data));
-                stable_sort(sync_data.begin(),sync_data.end(),[](const student_info &a,const student_info &b)
-                            {
-                                    return a.id<b.id;
-                            });
-                auto new_end=unique(sync_data.begin(),sync_data.end(),[] (const student_info &a,const student_info &b)
-                                    {
-                                            return a.id==b.id;
-                                    });
-                sync_data.erase(new_end,sync_data.end());
+                pthread_mutex_lock(&sync_data_mutex);
+                auto &current_sync_date = sync_data[mac_addr(conv->source_mac)];
+                current_sync_data.clear();
+                copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(current_sync_data));
+                pthread_mutex_unlock(&sync_data_mutex);
         }
         break;
         default:
