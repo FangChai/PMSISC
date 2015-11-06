@@ -360,7 +360,10 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                         return -3;
                 }
 
-                process_session(&s);
+                pthread_t th;
+
+                pthread_create(&th, NULL, process_session, (void *)&s);
+                pthread_detach(th);
 
                 #ifdef DEBUG
                 print_session(s);
