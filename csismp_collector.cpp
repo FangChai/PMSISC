@@ -31,15 +31,24 @@ static const uint8_t sync_mac[6] = {0x01, 0x80, 0xc2, 0xdd, 0xfe, 0xff};
 static map<mac_id_pair_t, struct slice_set> session_map;
 static struct mac_configure configure;
 static pthread_mutex_t collector_mtx;
-static bool sync_started = 0;
 
+//local function prototypes
+static bool cmp_slice(const struct slice& a, const struct slice& b);
+static int cmp_mac(const uint8_t mac1[], const uint8_t mac2[]);
+static void parse_control(struct control_code* ctrl, const uint8_t* raw);
+static inline void forget_session(mac_id_pair_t p);
+static int is_interesting(const ether_header* eth_hdr);
+static int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[]);
+static int construct_session(mac_id_pair_t p, struct session* s, session_type type);
+static int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len);
+static void reject_session(mac_id_pair_t p, session_type type);
 
-bool cmp_slice(const struct slice& a, const struct slice& b)
+static bool cmp_slice(const struct slice& a, const struct slice& b)
 {
         return a.slice_nr < b.slice_nr;
 }
 
-int cmp_mac(const uint8_t mac1[], const uint8_t mac2[])
+static int cmp_mac(const uint8_t mac1[], const uint8_t mac2[])
 {
         int result = 0;
         for(int i = 0; i < 6; i++) {
@@ -86,7 +95,7 @@ string get_dev()
 
 
 //get control code, and adjust the byte order
-void parse_control(struct control_code* ctrl, const uint8_t* raw)
+static void parse_control(struct control_code* ctrl, const uint8_t* raw)
 {
         ctrl->type = (session_type)raw[0];
         ctrl->begin = raw[1] & 0x80 ? 1 : 0;
@@ -101,13 +110,13 @@ void parse_control(struct control_code* ctrl, const uint8_t* raw)
         ctrl->session_id = be32toh(ctrl->session_id);
 }
 
-inline void forget_session(mac_id_pair_t p)
+static inline void forget_session(mac_id_pair_t p)
 {
         session_map.erase(p);
 
 }
 
-void reject_session(mac_id_pair_t p, session_type type)
+static void reject_session(mac_id_pair_t p, session_type type)
 {
         struct session rjt_s;
 
@@ -140,7 +149,7 @@ void reject_session(mac_id_pair_t p, session_type type)
 
 }
 
-int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len)
+static int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len)
 {
         t->type = (tlv_type) raw[0];
         switch(raw[0]) {
@@ -185,7 +194,7 @@ int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len)
 
 }
 
-int construct_session(mac_id_pair_t p, struct session* s, session_type type)
+static int construct_session(mac_id_pair_t p, struct session* s, session_type type)
 {
         struct slice_set& slc_set = session_map[p];
         uint8_t curr_state = 0;    //0, 1, 2 : id, name, faculty
@@ -252,7 +261,7 @@ int construct_session(mac_id_pair_t p, struct session* s, session_type type)
         return 0;
 }
 
-int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
+static int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 {
         const uint8_t* curr = raw;
         int remain = len;
@@ -366,7 +375,7 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         return 0;
 }
 
-int is_interesting(const ether_header* eth_hdr)
+static int is_interesting(const ether_header* eth_hdr)
 {
         if(ntohs(eth_hdr->ether_type) != CSISMP_PROTO || !cmp_mac(eth_hdr->ether_shost, configure.local_mac))
                 return 0;
@@ -383,7 +392,7 @@ int is_interesting(const ether_header* eth_hdr)
         return 0;
 }
 
-void collector(u_char *args, const struct pcap_pkthdr *header, const u_char *buffer)
+static void collector(u_char *args, const struct pcap_pkthdr *header, const u_char *buffer)
 {
 
         struct ether_header* eth_hdr;

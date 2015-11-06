@@ -56,12 +56,24 @@ b）学生信息管理，同步报文发送，StuInfo.txt输出
 期望输出：ack，30秒后的同步报文，StuInfo.txt
 结果：正确
 
+输入：add_session 增加100个学生，学号0~99，信息有变动
+期望输出：ack，30秒后的同步报文，StuInfo.txt
+结果：正确
+
 输入：del_session 删除44~66学号的学生
 期望输出：ack，30秒后的同步报文，StuInfo.txt
 结果：正确
 
 输入：sync_session 来自其它校区的学生，学号 404~502
-期望输出：30秒后的同步报文
+期望输出：30秒后的同步报文，StuInfo.txt
+结果：正确
+
+输入：sync_session 来自与上个校区同校区的学生，学号 404~502，信息有变动
+期望输出：30秒后的同步报文，StuInfo.txt
+结果：正确
+
+输入：sync_session 来自另一校区的学生，学号 505~606
+期望输出：30秒后的同步报文，StuInfo.txt
 结果：正确
 
 输入：add_session 修改学号为11的学生的名字为"test"

@@ -1,0 +1,46 @@
+1.collector模块
+数据结构:
+enum tlv_type {
+        TLV_END = 0,
+        TLV_ID,
+        TLV_NAME,
+        TLV_FACULTY
+};
+
+struct control_code {
+        session_type type;
+        uint8_t begin;
+        uint8_t end;
+        uint32_t slice_nr;
+        uint32_t session_id;
+};
+
+struct tlv {
+        tlv_type type;
+        uint8_t len;
+        string data;
+};
+
+struct slice {
+        int slice_nr;
+        vector<struct tlv> tlvs;
+};
+
+struct slice_set {
+        uint32_t total;
+        vector<struct slice> slices;
+};
+
+typedef pair<vector<uint8_t>, uint32_t> mac_id_pair_t;
+
+static map<mac_id_pair_t, struct slice_set> session_map; //mac_session-id对与当前收到的slices的映射
+static struct mac_configure configure;  //配置文件
+static pthread_mutex_t collector_mtx; //互斥锁，用于控制临界区访问（即上面两个全局数据）
+
+
+主要函数功能描述：
+static void parse_control(struct control_code* ctrl, const uint8_t* raw); //从原始报文里提取控制域
+static int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[]); //处理原始报文,解析报文各个部分并填入相应的数据结构中
+static int construct_session(mac_id_pair_t p, struct session* s, session_type type); //将slices整合成session
+static int get_tlv(struct tlv* t,  const uint8_t* raw, int32_t len); //从原始报文中提取一个tlv
+
