@@ -20,7 +20,7 @@ class mac_addr{
 private:
     uint8_t addr[6];
 public:
-    mac_addr(uint8_t[] _addr){
+    mac_addr(uint8_t _addr[]){
         for(int i=0;i<6;++i)
             addr[i]=_addr[i];
     }
@@ -42,6 +42,19 @@ static bool sync_started=0;
 static pthread_mutex_t sync_started_mutex;
 
 void Timer_Send();
+
+int cmp_mac(const uint8_t mac1[], const uint8_t mac2[])
+{
+        int result = 0;
+        for(int i = 0; i < 6; i++) {
+                if(mac1[i] != mac2[i]) {
+                        result = mac1[i] - mac2[i];
+                        break;
+                }
+        }
+
+        return result;
+}
 
 bool check_valid(session to_check)
 {
