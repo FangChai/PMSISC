@@ -1,5 +1,4 @@
 extern "C" {
-#include <sys/socket.h>
 #include <linux/if_packet.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
@@ -7,7 +6,6 @@ extern "C" {
 #include <pthread.h>
 #include <endian.h>
 #include <pcap.h>
-#include <malloc.h>
 }
 
 #include <cstdio>
@@ -16,11 +14,11 @@ extern "C" {
 #include <mutex>
 #include <algorithm>
 #include "csismp_limits.h"
-#include "session.h"
-#include "timer.h"
+#include "csismp_session.h"
+#include "csismp_timer.h"
 #include "csismp_collector.h"
 #include "csismp_sender.h"
-#include "mac_configure.h"
+#include "csismp_config.h"
 
 
 using namespace std;
@@ -28,8 +26,12 @@ using namespace std;
 static struct mac_configure config;
 static pcap_t* descr;
 
+//local function prototypes
+static inline uint32_t tlvs_len(const vector<struct tlv>& tlvs);
+static inline void send_raw(uint8_t* dgram, int size);
+static void send_dgram(const vector<struct tlv>& tlvs, struct control_code cntl, const uint8_t dest_mac[]);
 
-inline static uint32_t tlvs_len(const vector<struct tlv>& tlvs)
+static inline uint32_t tlvs_len(const vector<struct tlv>& tlvs)
 {
         uint32_t result = 0;
         for(auto iter = tlvs.begin(); iter != tlvs.end(); ++iter)
@@ -49,7 +51,7 @@ static inline void send_raw(uint8_t* dgram, int size)
 #endif
 }
 
-void send_dgram(const vector<struct tlv>& tlvs, struct control_code cntl, const uint8_t dest_mac[])
+static void send_dgram(const vector<struct tlv>& tlvs, struct control_code cntl, const uint8_t dest_mac[])
 {
         uint32_t dgram_len;
         uint8_t* dgram;
@@ -82,7 +84,6 @@ void send_dgram(const vector<struct tlv>& tlvs, struct control_code cntl, const 
         curr+=4;
 
         //construct the tlvs field
-
         for(auto iter = tlvs.begin(); iter != tlvs.end(); ++iter) {
                 if(0 == iter->type) {
                         curr[0] = 0x00;

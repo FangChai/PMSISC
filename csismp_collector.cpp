@@ -7,27 +7,19 @@ extern "C" {
 #include <pthread.h>
 #include <endian.h>
 #include <pcap.h>
+#include <string.h>
+#include <stdio.h>
 }
 
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
 #include <map>
-#include <mutex>
 #include <algorithm>
 #include <utility>
-#include <cstring>
-#include <memory>
 #include "csismp_limits.h"
-#include "session.h"
-#include "timer.h"
+#include "csismp_timer.h"
 #include "csismp_collector.h"
 #include "csismp_sender.h"
 #include "csismp_process.h"
-#include "mac_configure.h"
-
-
-#define DEBUG
+#include "csismp_config.h"
 
 #ifdef DEBUG
 extern void print_session(const struct session& s);
@@ -67,9 +59,9 @@ string get_dev()
         char errbuf[PCAP_ERRBUF_SIZE];
         string result;
 
-        #ifdef DEBUG
+#ifdef DEBUG
         return "wlp3s0";
-        #endif
+#endif
 
         if(pcap_findalldevs(&alldevs, errbuf) == -1)
         {
@@ -83,7 +75,7 @@ string get_dev()
                         result = string(d->name);
                         continue;
                 } else if(strcmp(d->name, result.c_str()) <=0
-                              &&(strcmp(d->name, "any")))
+                          &&(strcmp(d->name, "any")))
                         result = string(d->name);
         }
 
@@ -124,7 +116,6 @@ void reject_session(mac_id_pair_t p, session_type type)
 
         //if already forgotten, then we don't care
         if(session_map.end() == session_map.find(p)) {
-                printf("%d is already forgotten\n", p.second);
 
                 pthread_mutex_unlock(&collector_mtx);
                 return;
@@ -133,7 +124,6 @@ void reject_session(mac_id_pair_t p, session_type type)
         //don't send rjt to sync sessions
         if(SESSION_SYN == type) {
                 forget_session(p);
-                printf("ignore sync session %d\n", p.second);
                 pthread_mutex_unlock(&collector_mtx);
                 return;
         }
@@ -145,7 +135,6 @@ void reject_session(mac_id_pair_t p, session_type type)
         rjt_s.session_id = p.second;
         send_session(rjt_s);
         forget_session(p);
-        printf("reject %d\n", p.second);
 
         pthread_mutex_unlock(&collector_mtx);
 
@@ -269,8 +258,8 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         int remain = len;
         struct control_code cntl_cd;
         struct slice slc;
-        vector<uint8_t> mac;
         mac_id_pair_t mcid_pair;
+        vector<uint8_t> mac;
         uint8_t err_flag, end_flag;
 
         parse_control(&cntl_cd, curr);
@@ -297,7 +286,6 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
 
                 add_timer(mcid_pair, cntl_cd.type);
         }
-
 
         pthread_mutex_unlock(&collector_mtx);
 
@@ -340,8 +328,8 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
         }
 
         //update the corresponding slice_set
-
         pthread_mutex_lock(&collector_mtx);
+
         struct slice_set& slc_set = session_map[mcid_pair];
         if(cntl_cd.end)
                 slc_set.total = cntl_cd.slice_nr + 1;
@@ -365,21 +353,15 @@ int process_dgram(const uint8_t* raw, int len, uint8_t source_mac[])
                 pthread_create(&th, NULL, process_session, (void *)s);
                 pthread_detach(th);
 
-                #ifdef DEBUG
+#ifdef DEBUG
                 print_session(*s);
-                #endif
+#endif
 
                 forget_session(mcid_pair);
 
         }
+
         pthread_mutex_unlock(&collector_mtx);
-        printf("mac ");
-        for(int i = 0; i < 6; ++i) {
-                printf("%2x", mcid_pair.first[i]);
-        }
-        printf(", id %d, slice %d, begin: %d, end: %d\n", mcid_pair.second, cntl_cd.slice_nr, cntl_cd.begin, cntl_cd.end);
-        printf("slc_set status: total %d, current %d\n", slc_set.total, slc_set.slices.size());
-        putchar('\n');
 
         return 0;
 }
@@ -424,12 +406,11 @@ void start_collector()
         pthread_mutex_init(&collector_mtx, NULL);
         init_timer(reject_session);
 
-        //read config
+        //read config, and write it
         configure = mac_configure("Config.txt");
 
         //set up pcap
         dev = get_dev();
-
         descr = pcap_open_live(dev.c_str(), BUFSIZ, 1, 0, errbuf);
 
         if(NULL == descr) {

@@ -3,10 +3,10 @@ DEBUG := -g
 LIBS := -lpthread -lpcap
 SOURCES := csismp_main.cpp csismp_collector.cpp \
 	csismp_sender.cpp csismp_process.cpp \
-	timer.cpp print_session.cpp
+	csismp_timer.cpp print_session.cpp
 HEADERS := csismp_collector.h csismp_sender.h \
-	csismp_process.h timer.h\
-	mac_configure.h
+	csismp_process.h csismp_timer.h\
+	csismp_config.h
 
 all : SeedCup.exe
 
