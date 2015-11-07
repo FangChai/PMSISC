@@ -79,55 +79,52 @@ static void print_all_students(){
         fprintf(fp,"Time : %s\nFaculty                             Student ID       Name\n",time.data());
         fprintf(fp,"--------------------------------------------------------------------------------\n");
 
-        for(int i = 0; i<local_data.size(); i++){
-                int line = (local_data[i].faculty.size()-1)/33;
+        deque<student_info> all_data;
+        copy(local_data.begin(),local_data.end(),back_inserter(all_data));
+        for(auto &elem : sync_data){
+                copy(elem.second.begin(),elem.second.end(),back_inserter(all_data));
+        }
+        sort(all_data.begin(),all_data.end(),[](const student_info & a,const student_info &b)
+                {
+                if(a.faculty!=b.faculty){
+                    return a.faculty<b.faculty;
+                }
+                else if(a.id!=b.id){
+                    return a.id<b.id;
+                }
+                else if(a.name!=a.name){
+                    return a.name<b.name;
+                }
+                else
+                    return true;
+                });
+        auto new_end=unique(all_data.begin(),all_data.end(),[](const student_info & a,const student_info& b){
+                    return a.id==b.id;
+                });
+        all_data.erase(new_end,all_data.end());
+        for(int i = 0; i<all_data.size(); i++){
+                int line = (all_data[i].faculty.size()-1)/33;
 
                 if(line<0)
                         line = 0;
 
                 for(int j = 0; j<line; j++){
                         for(int k = j*33; k<(j+1)*33; k++)
-                                fprintf(fp,"%c",local_data[i].faculty[k]);
+                                fprintf(fp,"%c",all_data[i].faculty[k]);
                         fprintf(fp,"\n");
                 }
 
-                for(int j = line*33; j<local_data[i].faculty.size(); j++)
-                        fprintf(fp,"%c",local_data[i].faculty[j]);
+                for(int j = line*33; j<all_data[i].faculty.size(); j++)
+                        fprintf(fp,"%c",all_data[i].faculty[j]);
 
-                for(int j = local_data[i].faculty.size(); j<(line+1)*33; j++)
+                for(int j = all_data[i].faculty.size(); j<(line+1)*33; j++)
                         fprintf(fp," ");
 
-                fprintf(fp,"   %s",local_data[i].id.data());
-                for(int j = local_data[i].id.size(); j<17; j++)
+                fprintf(fp,"   %s",all_data[i].id.data());
+                for(int j = all_data[i].id.size(); j<17; j++)
                         fprintf(fp," ");
-                fprintf(fp,"%s\n",local_data[i].name.data());
+                fprintf(fp,"%s\n",all_data[i].name.data());
         }
-
-        pthread_mutex_lock(&sync_data_mutex);
-        for(auto iter = sync_data.begin(); iter != sync_data.end(); ++iter){
-                auto one_sync_data = iter->second;
-
-                for(int i = 0; i<one_sync_data.size(); i++){
-                        int line = (one_sync_data[i].faculty.size()-1)/33; if(line<0)line = 0;
-
-                        for(int j = 0; j<line; j++){
-                                for(int k = j*33; k<(j+1)*33; k++)
-                                        fprintf(fp,"%c",one_sync_data[i].faculty[k]);
-                                fprintf(fp,"\n");
-                        }
-
-                        for(int j = line*33; j<one_sync_data[i].faculty.size(); j++)
-                                fprintf(fp,"%c",one_sync_data[i].faculty[j]);
-                        for(int j = one_sync_data[i].faculty.size(); j<(line+1)*33; j++)
-                                fprintf(fp," ");
-
-                        fprintf(fp,"   %s",one_sync_data[i].id.data());
-                        for(int j = one_sync_data[i].id.size(); j<17; j++)
-                                fprintf(fp," ");
-                        fprintf(fp,"%s\n",one_sync_data[i].name.data());
-                }
-        }
-        pthread_mutex_unlock(&sync_data_mutex);
 
         fprintf(fp,"--------------------------------------------------------------------------------\n");
         fclose(fp);
