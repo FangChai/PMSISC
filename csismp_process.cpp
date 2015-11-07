@@ -79,11 +79,19 @@ static void print_all_students(){
         fprintf(fp,"Time : %s\nFaculty                             Student ID       Name\n",time.data());
         fprintf(fp,"--------------------------------------------------------------------------------\n");
 
+        //make a copy of the current student's information
+        pthread_mutex_lock(&local_data_mutex);
         deque<student_info> all_data;
         copy(local_data.begin(),local_data.end(),back_inserter(all_data));
+        pthread_mutex_unlock(&local_data_mutex);
+
+        pthread_mutex_lock(&sync_data_mutex);
         for(auto &elem : sync_data){
                 copy(elem.second.begin(),elem.second.end(),back_inserter(all_data));
         }
+        pthread_mutex_unlock(&sync_data_mutex);
+
+        //sort and remove duplicated students
         sort(all_data.begin(),all_data.end(),[](const student_info & a,const student_info &b)
                 {
                 if(a.faculty!=b.faculty){
@@ -102,6 +110,8 @@ static void print_all_students(){
                     return a.id==b.id;
                 });
         all_data.erase(new_end,all_data.end());
+
+        //print them out
         for(int i = 0; i<all_data.size(); i++){
                 int line = (all_data[i].faculty.size()-1)/33;
 
@@ -186,9 +196,10 @@ void* process_session(void  *_conv)
                                 updated=true;
                         if(initial_size!=local_data.size())//if there are any addtions.
                                 updated=true;
+                        pthread_mutex_unlock(&local_data_mutex);
+
                         if(updated)
                                 print_all_students();
-                        pthread_mutex_unlock(&local_data_mutex);
 
                         session ack_msg = construct_ackmsg(conv);
                         send_session(ack_msg);

@@ -69,7 +69,7 @@ string get_dev()
         string result;
 
 #ifdef DEBUG
-        return "enp2s0";
+        return "wlp3s0";
 #endif
 
         if(pcap_findalldevs(&alldevs, errbuf) == -1)
