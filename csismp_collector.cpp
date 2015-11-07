@@ -69,7 +69,7 @@ string get_dev()
         string result;
 
 #ifdef DEBUG
-        return "wlp3s0";
+        return "enp2s0";
 #endif
 
         if(pcap_findalldevs(&alldevs, errbuf) == -1)
@@ -417,6 +417,7 @@ void start_collector()
 
         //read config, and write it
         configure = mac_configure("Config.txt");
+        configure.Write("CfgInfo.txt");
 
         //set up pcap
         dev = get_dev();
