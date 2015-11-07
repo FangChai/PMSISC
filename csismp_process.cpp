@@ -168,7 +168,9 @@ void* process_session(void  *_conv)
         case session_type::SESSION_ADD:
         {
                 if(check_valid(*conv)){
+                        bool updated=false;
                         pthread_mutex_lock(&local_data_mutex);
+                        auto initial_size=local_data.size();
                         copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(local_data));
                         stable_sort(local_data.begin(),local_data.end(),[](const student_info &a,const student_info &b)
                                     {
@@ -183,7 +185,11 @@ void* process_session(void  *_conv)
                                               });
                         auto diff = local_data.end()-new_end;
                         local_data.erase(new_end,local_data.end());
-                        if(update_count != diff || (update_count == 0 && diff == 0))
+                        if(update_count != diff || (update_count == 0 && diff == 0))//if there are any updates.
+                                updated=true;
+                        if(initial_size!=local_data.size())//if there are any addtions.
+                                updated=true;
+                        if(updated)
                                 print_all_students();
                         pthread_mutex_unlock(&local_data_mutex);
 
@@ -257,28 +263,27 @@ void* process_session(void  *_conv)
                         addr[i]=conv->source_mac[i];
 
                 auto &current_sync_data = sync_data[addr];
+                bool updated=false;
                 if(check_valid(*conv)){
-                        copy(conv->info_list.begin(),conv->info_list.end(),front_inserter(current_sync_data));
-                        stable_sort(current_sync_data.begin(),current_sync_data.end(),[](const student_info &a,const student_info &b)
-                                    {
-                                            return a.id<b.id ;
-                                    });
-                        size_t update_count=0;
-                        auto new_end=unique(current_sync_data.begin(),current_sync_data.end(),[&] (const student_info &a,const student_info &b)
-                                            {
-                                                    if(a.id==b.id&&a.name==b.name&&a.faculty==b.faculty)
-                                                            update_count++;
-                                                    return a.id==b.id;
-                                            });
-                        auto diff = current_sync_data.end()-new_end;
-                        current_sync_data.erase(new_end,current_sync_data.end());
-                        pthread_mutex_unlock(&sync_data_mutex);
-                        if(update_count!=diff||(update_count==0&&diff==0)){
-                                print_all_students();
+                        sort(conv->info_list.begin(),conv->info_list.end(),[](const student_info &a,const student_info &b)
+                                {
+                                        return a.id<b.id;
+                                });
+                        if(current_sync_data.size()==conv->info_list.size()){
+                                for(int i = 0; i < current_sync_data.size(); ++i)
+                                if(current_sync_data[i].id!=conv->info_list[i].id || current_sync_data[i].name!=conv->info_list[i].name || current_sync_data[i].faculty!=conv->info_list[i].faculty){
+                                        updated=true;
+                                }
                         }
+                        else
+                                updated=true;
+                        current_sync_data.clear();
+                        current_sync_data.assign(conv->info_list.begin(),conv->info_list.end());
                 }
-
                 pthread_mutex_unlock(&sync_data_mutex);
+                if(updated){
+                        print_all_students();
+                }
 
         }
         break;
